@@ -1,0 +1,33 @@
+body {
+  font-family: Arial, sans-serif;
+  margin: 20px;
+}
+
+h1 {
+  text-align: center;
+}
+
+#task-form input,
+#task-form button {
+  margin: 5px;
+}
+
+#task-table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+#task-table th,
+#task-table td {
+  padding: 8px;
+  text-align: left;
+  border-bottom: 1px solid #ddd;
+}
+
+#task-table th {
+  background-color: #f2f2f2;
+}
+
+#task-table td:last-child {
+  text-align: center;
+}

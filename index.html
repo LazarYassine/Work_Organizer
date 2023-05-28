@@ -1,0 +1,683 @@
+<!-- <!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Task Manager</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.16/tailwind.min.css">
+</head>
+
+<body class="bg-gray-100">
+  <div class="container mx-auto px-4 py-8">
+    <h1 class="text-2xl font-bold mb-4">Task Manager</h1>
+
+    <form id="taskForm" class="mb-4">
+      <div class="flex mb-4">
+        <div class="w-1/4 mr-4">
+          <label for="taskId" class="block mb-1">Task ID</label>
+          <input type="text" id="taskId" class="w-full border border-gray-300 p-2 rounded">
+        </div>
+        <div class="w-1/4 mr-4">
+          <label for="client" class="block mb-1">Client</label>
+          <input type="text" id="client" class="w-full border border-gray-300 p-2 rounded">
+        </div>
+        <div class="w-1/4 mr-4">
+          <label for="startDate" class="block mb-1">Start Date</label>
+          <input type="date" id="startDate" class="w-full border border-gray-300 p-2 rounded">
+        </div>
+        <div class="w-1/4">
+          <label for="endDate" class="block mb-1">End Date</label>
+          <input type="date" id="endDate" class="w-full border border-gray-300 p-2 rounded">
+        </div>
+      </div>
+
+      <div class="flex mb-4">
+        <div class="w-1/2 mr-4">
+          <label for="status" class="block mb-1">Status</label>
+          <select id="status" class="w-full border border-gray-300 p-2 rounded">
+            <option value="Pending">Pending</option>
+            <option value="In Progress">In Progress</option>
+            <option value="Completed">Completed</option>
+          </select>
+        </div>
+        <div class="w-1/2">
+          <label for="description" class="block mb-1">Description</label>
+          <textarea id="description" rows="2" class="w-full border border-gray-300 p-2 rounded"></textarea>
+        </div>
+      </div>
+
+      <div class="flex">
+        <button id="saveTaskBtn" type="submit" class="bg-blue-500 hover:bg-blue-600 text-white font-medium py-1 px-2 rounded">
+          Save Task
+        </button>
+        <button id="exportBtn" type="button" class="ml-4 bg-green-500 hover:bg-green-600 text-white font-medium py-1 px-2 rounded">
+          Export to Excel
+        </button>
+      </div>
+    </form>
+
+    <table id="taskTable" class="w-full table-auto bg-white border border-gray-300">
+      <thead>
+        <tr>
+          <th class="py-2 px-4 border-b">Task ID</th>
+          <th class="py-2 px-4 border-b">Client</th>
+          <th class="py-2 px-4 border-b">Start Date</th>
+          <th class="py-2 px-4 border-b">End Date</th>
+          <th class="py-2 px-4 border-b">Status</th>
+          <th class="py-2 px-4 border-b">Description</th>
+          <th class="py-2 px-4 border-b"></th>
+          <th class="py-2 px-4 border-b"></th>
+        </tr>
+      </thead>
+      <tbody id="taskList"></tbody>
+    </table>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+  <script src="https://unpkg.com/xlsx/dist/xlsx.full.min.js"></script>
+  <script>
+    const API_URL = 'http://localhost:3000/tasks';
+    const taskForm = document.getElementById('taskForm');
+    const taskList = document.getElementById('taskList');
+    const saveTaskBtn = document.getElementById('saveTaskBtn');
+    const exportBtn = document.getElementById('exportBtn');
+
+    var stop_add = false
+
+    // Function to fetch tasks from the server
+    async function fetchTasks() {
+      try {
+        const response = await axios.get(API_URL);
+        return response.data;
+      } catch (error) {
+        console.error('Error fetching tasks:', error);
+        throw error;
+      }
+    }
+
+    // Function to create a new task
+    async function createTask(taskData) {
+      try {
+        const response = await axios.post(API_URL, taskData);
+        return response.data;
+      } catch (error) {
+        console.error('Error creating task:', error);
+        throw error;
+      }
+    }
+
+    // Function to update a task
+    async function updateTask(taskId, taskData) {
+      try {
+        const response = await axios.put(`${API_URL}/${taskId}`, taskData);
+        return response.data;
+      } catch (error) {
+        console.error('Error updating task:', error);
+        throw error;
+      }
+    }
+
+    // Function to render a task row
+    function renderTask(task) {
+      const row = document.createElement('tr');
+      row.innerHTML = `
+        <td class="py-2 px-4 border-b">${task.taskId}</td>
+        <td class="py-2 px-4 border-b">${task.client}</td>
+        <td class="py-2 px-4 border-b">${task.startDate}</td>
+        <td class="py-2 px-4 border-b">${task.endDate}</td>
+        <td class="py-2 px-4 border-b">${task.status}</td>
+        <td class="py-2 px-4 border-b">${task.description}</td>
+        <td class="py-2 px-4 border-b">
+          <button class="editBtn bg-blue-500 hover:bg-blue-600 text-white font-medium py-1 px-2 rounded">
+            Edit
+          </button>
+        </td>
+        <td class="py-2 px-4 border-b">
+          <button class="deleteBtn bg-red-500 hover:bg-red-600 text-white font-medium py-1 px-2 rounded">
+            Delete
+          </button>
+        </td>
+      `;
+
+      const editBtn = row.querySelector('.editBtn');
+      const deleteBtn = row.querySelector('.deleteBtn');
+
+      editBtn.addEventListener('click', () => editTask(task));
+      deleteBtn.addEventListener('click', () => deleteTask(task.taskId));
+
+      taskList.appendChild(row);
+    }
+
+    // Function to edit a task
+    function editTask(task) {
+      document.getElementById('taskId').value = task.taskId;
+      document.getElementById('client').value = task.client;
+      document.getElementById('startDate').value = task.startDate;
+      document.getElementById('endDate').value = task.endDate;
+      document.getElementById('status').value = task.status;
+      document.getElementById('description').value = task.description;
+
+      saveTaskBtn.textContent = 'Update Task';
+      saveTaskBtn.removeEventListener('click', saveTask);
+      saveTaskBtn.addEventListener('click', () => updateExistingTask(task.taskId));
+    }
+
+    // Function to update an existing task
+    async function updateExistingTask(taskId) {
+      stop_add = true
+      const taskData = {
+        id: document.getElementById("taskId").value,
+        taskId: document.getElementById('taskId').value,
+        client: document.getElementById('client').value,
+        startDate: document.getElementById('startDate').value,
+        endDate: document.getElementById('endDate').value,
+        status: document.getElementById('status').value,
+        description: document.getElementById('description').value,
+      };
+
+      try {
+        await updateTask(taskId, taskData);
+        //clearForm();
+        saveTaskBtn.textContent = 'Save Task';
+        saveTaskBtn.removeEventListener('click', updateExistingTask);
+        saveTaskBtn.addEventListener('click', saveTask);
+        await loadTasks();
+      } catch (error) {
+        console.error('Error updating task:', error);
+      }
+    }
+
+    // Function to delete a task
+    async function deleteTask(taskId) {
+      try {
+        await axios.delete(`${API_URL}/${taskId}`);
+        await loadTasks();
+      } catch (error) {
+        console.error('Error deleting task:', error);
+      }
+    }
+
+    // Function to export tasks to Excel
+    function exportTasksToExcel() {
+      const headers = ['Task ID', 'Client', 'Start Date', 'End Date', 'Status', 'Description'];
+      const data = Array.from(document.querySelectorAll('#taskList tr')).map(row => {
+        return Array.from(row.children).map(cell => cell.innerText);
+      });
+
+      const workbook = XLSX.utils.book_new();
+      const worksheet = XLSX.utils.aoa_to_sheet([headers, ...data]);
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Tasks');
+      XLSX.writeFile(workbook, 'tasks.xlsx');
+    }
+
+    // Function to clear the form fields
+    function clearForm() {
+      document.getElementById('taskId').value = '';
+      document.getElementById('client').value = '';
+      document.getElementById('startDate').value = '';
+      document.getElementById('endDate').value = '';
+      document.getElementById('status').value = 'Pending';
+      document.getElementById('description').value = '';
+    }
+
+    // Function to handle the form submission
+    async function saveTask(event) {
+
+      if ( stop_add == true ) {
+        return;
+      }
+
+      event.preventDefault();
+
+      const taskData = {
+        taskId: document.getElementById('taskId').value,
+        client: document.getElementById('client').value,
+        startDate: document.getElementById('startDate').value,
+        endDate: document.getElementById('endDate').value,
+        status: document.getElementById('status').value,
+        description: document.getElementById('description').value,
+      };
+
+      try {
+        await createTask(taskData);
+        clearForm();
+        await loadTasks();
+      } catch (error) {
+        console.error('Error saving task:', error);
+      }
+    }
+
+    // Function to load and render tasks
+    async function loadTasks() {
+      taskList.innerHTML = '';
+
+      try {
+        const tasks = await fetchTasks();
+        tasks.forEach(task => renderTask(task));
+      } catch (error) {
+        console.error('Error loading tasks:', error);
+      }
+
+      stop_add = false
+
+    }
+
+    // Event listeners
+    taskForm.addEventListener('submit', saveTask);
+    exportBtn.addEventListener('click', exportTasksToExcel);
+
+    // Load initial tasks
+    loadTasks();
+  </script>
+</body>
+
+</html> -->
+
+
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Task Manager</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.16/tailwind.min.css">
+</head>
+
+<body class="bg-gray-100">
+  <div class="container mx-auto px-4 py-8">
+    <h1 class="text-2xl font-bold mb-4">Task Manager</h1>
+
+    <form id="taskForm" class="mb-4">
+      <div class="flex mb-4">
+        <div class="w-1/4 mr-4">
+          <label for="taskId" class="block mb-1">Task ID</label>
+          <input type="text" id="taskId" class="w-full border border-gray-300 p-2 rounded">
+        </div>
+        <div class="w-1/4 mr-4">
+          <label for="client" class="block mb-1">Client</label>
+          <input type="text" id="client" class="w-full border border-gray-300 p-2 rounded">
+        </div>
+        <div class="w-1/4 mr-4">
+          <label for="startDate" class="block mb-1">Start Date</label>
+          <input type="date" id="startDate" class="w-full border border-gray-300 p-2 rounded">
+        </div>
+        <div class="w-1/4">
+          <label for="endDate" class="block mb-1">End Date</label>
+          <input type="date" id="endDate" class="w-full border border-gray-300 p-2 rounded">
+        </div>
+      </div>
+
+      <div class="flex mb-4">
+        <div class="w-1/2 mr-4">
+          <label for="status" class="block mb-1">Status</label>
+          <select id="status" class="w-full border border-gray-300 p-2 rounded">
+            <option value="Pending">Pending</option>
+            <option value="In Progress">In Progress</option>
+            <option value="Completed">Completed</option>
+          </select>
+        </div>
+        <div class="w-1/2">
+          <label for="description" class="block mb-1">Description</label>
+          <textarea id="description" rows="2" class="w-full border border-gray-300 p-2 rounded"></textarea>
+        </div>
+      </div>
+
+
+      <div class="flex mb-4">
+        <div class="w-1/2 mr-4">
+          <label for="source" class="block mb-1">Source</label>
+          <textarea id="source" rows="2" class="w-full border border-gray-300 p-2 rounded"></textarea>
+        </div>
+        
+      </div>
+
+      <div class="flex">
+        <button id="saveTaskBtn" type="submit" class="bg-blue-500 hover:bg-blue-600 text-white font-medium py-1 px-2 rounded">
+          Save Task
+        </button>
+        <button id="exportBtn" type="button" class="ml-4 bg-green-500 hover:bg-green-600 text-white font-medium py-1 px-2 rounded">
+          Export to Excel
+        </button>
+      </div>
+    </form>
+
+    <div class="flex mb-4">
+      <input type="text" id="searchInput" placeholder="Search" class="w-1/2 border border-gray-300 p-2 rounded">
+      <button id="searchBtn" class="ml-4 bg-blue-500 hover:bg-blue-600 text-white font-medium py-1 px-2 rounded">Search</button>
+    </div>
+
+    <table id="taskTable" class="w-full table-auto bg-white border border-gray-300">
+      <thead>
+        <tr>
+          <th class="py-2 px-4 border-b">Task ID</th>
+          <th class="py-2 px-4 border-b">Client</th>
+          <th class="py-2 px-4 border-b">Start Date</th>
+          <th class="py-2 px-4 border-b">End Date</th>
+          <th class="py-2 px-4 border-b">Status</th>
+          <th class="py-2 px-4 border-b">Description</th>
+          <th class="py-2 px-4 border-b">Source</th>
+          <th class="py-2 px-4 border-b"></th>
+          <th class="py-2 px-4 border-b"></th>
+        </tr>
+      </thead>
+      <tbody id="taskList"></tbody>
+    </table>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+  <script src="https://unpkg.com/xlsx/dist/xlsx.full.min.js"></script>
+  <script>
+    const API_URL = 'https://jolly-dungarees-bass.cyclic.app/tasks';
+    const taskForm = document.getElementById('taskForm');
+    const taskList = document.getElementById('taskList');
+    const saveTaskBtn = document.getElementById('saveTaskBtn');
+    const exportBtn = document.getElementById('exportBtn');
+    const searchInput = document.getElementById('searchInput');
+    const searchBtn = document.getElementById('searchBtn');
+
+    var stop_add = false;
+
+    // Function to fetch tasks from the server
+    async function fetchTasks() {
+      try {
+        const response = await axios.get(API_URL);
+        return response.data;
+      } catch (error) {
+        console.error('Error fetching tasks:', error);
+        throw error;
+      }
+    }
+
+    // Function to create a new task
+    async function createTask(taskData) {
+      try {
+        const response = await axios.post(API_URL, taskData);
+        return response.data;
+      } catch (error) {
+        console.error('Error creating task:', error);
+        throw error;
+      }
+    }
+
+    // Function to update a task
+    async function updateTask(taskId, taskData) {
+      try {
+        const response = await axios.put(`${API_URL}/${taskId}`, taskData);
+        return response.data;
+      } catch (error) {
+        console.error('Error updating task:', error);
+        throw error;
+      }
+    }
+
+    // Function to delete a task
+    async function deleteTask(taskId) {
+      try {
+        await axios.delete(`${API_URL}/${taskId}`);
+        await loadTasks();
+      } catch (error) {
+        console.error('Error deleting task:', error);
+      }
+    }
+
+    // Function to export tasks to Excel
+    // function exportTasksToExcel(tasks) {
+    //   const headers = ['Task ID', 'Client', 'Start Date', 'End Date', 'Status', 'Description'];
+    //   const data = tasks.map(task => [task.taskId, task.client, task.startDate, task.endDate, task.status, task.description]);
+
+    //   const workbook = XLSX.utils.book_new();
+    //   const worksheet = XLSX.utils.aoa_to_sheet([headers, ...data]);
+    //   XLSX.utils.book_append_sheet(workbook, worksheet, 'Tasks');
+    //   XLSX.writeFile(workbook, 'tasks.xlsx');
+    // }
+    // Function to export filtered tasks to Excel
+    function exportFilteredTasksToExcel() {
+  const searchInput = document.getElementById('searchInput').value.toLowerCase();
+  
+  // Define the customized headers for Excel
+  const headers = ['Client', 'Date de debut', 'Date de fin', 'Status', 'Description', 'Source'];
+
+  // Map the customized data to match the headers
+  const data = Array.from(document.querySelectorAll('#taskList tr')).map(row => {
+    const rowData = Array.from(row.children).map(cell => cell.innerText);
+
+    // Customize the data values based on your requirements
+    const client = rowData[1];
+    const startDate = rowData[2];
+    const endDate = rowData[3];
+    const status = rowData[4];
+    const description = rowData[5];
+    const source = rowData[6]; // Replace with your customized source value
+    return [client, startDate, endDate, status, description, source];
+  }).filter(rowData => {
+    // Filter based on search input
+    return rowData.some(cellData => cellData.toLowerCase().includes(searchInput));
+  });
+
+  const workbook = XLSX.utils.book_new();
+  const worksheet = XLSX.utils.aoa_to_sheet([headers, ...data]);
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Tasks');
+  XLSX.writeFile(workbook, 'filtered_tasks.xlsx');
+}
+  // Event listener for the search button
+  //const searchBtn = document.getElementById('searchBtn');
+  //searchBtn.addEventListener('click', exportFilteredTasksToExcel);
+
+    // Function to render a task row
+    function renderTask(task) {
+      const row = document.createElement('tr');
+      row.innerHTML = `
+        <td class="py-2 px-4 border-b">${task.taskId}</td>
+        <td class="py-2 px-4 border-b">${task.client}</td>
+        <td class="py-2 px-4 border-b">${task.startDate}</td>
+        <td class="py-2 px-4 border-b">${task.endDate}</td>
+        <td class="py-2 px-4 border-b">${task.status}</td>
+        <td class="py-2 px-4 border-b">${task.description}</td>
+        <td class="py-2 px-4 border-b">${task.source}</td>
+        <td class="py-2 px-4 border-b">
+          <button class="editBtn bg-blue-500 hover:bg-blue-600 text-white font-medium py-1 px-2 rounded">
+            Edit
+          </button>
+        </td>
+        <td class="py-2 px-4 border-b">
+          <button class="deleteBtn bg-red-500 hover:bg-red-600 text-white font-medium py-1 px-2 rounded">
+            Delete
+          </button>
+        </td>
+      `;
+
+      const editBtn = row.querySelector('.editBtn');
+      const deleteBtn = row.querySelector('.deleteBtn');
+
+      editBtn.addEventListener('click', () => editTask(task));
+      deleteBtn.addEventListener('click', () => deleteTask(task.taskId));
+
+      taskList.appendChild(row);
+    }
+
+    // Function to edit a task
+    function editTask(task) {
+      document.getElementById('taskId').value = task.taskId;
+      document.getElementById('client').value = task.client;
+      document.getElementById('startDate').value = task.startDate;
+      document.getElementById('endDate').value = task.endDate;
+      document.getElementById('status').value = task.status;
+      document.getElementById('description').value = task.description;
+      document.getElementById("source").value = task.source
+
+      saveTaskBtn.textContent = 'Update Task';
+      saveTaskBtn.removeEventListener('click', saveTask);
+      saveTaskBtn.addEventListener('click', () => updateExistingTask(task.taskId));
+    }
+
+    // Function to update an existing task
+    async function updateExistingTask(taskId) {
+      stop_add = true;
+      const taskData = {
+        id: document.getElementById("taskId").value,
+        taskId: document.getElementById('taskId').value,
+        client: document.getElementById('client').value,
+        startDate: document.getElementById('startDate').value,
+        endDate: document.getElementById('endDate').value,
+        status: document.getElementById('status').value,
+        description: document.getElementById('description').value,
+        source: document.getElementById("source").value
+      };
+
+      try {
+        await updateTask(taskId, taskData);
+        saveTaskBtn.textContent = 'Save Task';
+        saveTaskBtn.removeEventListener('click', updateExistingTask);
+        saveTaskBtn.addEventListener('click', saveTask);
+        await loadTasks();
+      } catch (error) {
+        console.error('Error updating task:', error);
+      }
+    }
+
+    // Function to clear the form fields
+    function clearForm() {
+      document.getElementById('taskId').value = '';
+      document.getElementById('client').value = '';
+      document.getElementById('startDate').value = '';
+      document.getElementById('endDate').value = '';
+      document.getElementById('status').value = 'Pending';
+      document.getElementById('description').value = '';
+      document.getElementById("source").value = '';
+    }
+
+    // Function to handle the form submission
+    async function saveTask(event) {
+      if (stop_add) {
+        return;
+      }
+
+      event.preventDefault();
+
+      const taskData = {
+        taskId: document.getElementById('taskId').value,
+        client: document.getElementById('client').value,
+        startDate: document.getElementById('startDate').value,
+        endDate: document.getElementById('endDate').value,
+        status: document.getElementById('status').value,
+        description: document.getElementById('description').value,
+        source: document.getElementById('source').value,
+      };
+
+      try {
+        await createTask(taskData);
+        clearForm();
+        await loadTasks();
+      } catch (error) {
+        console.error('Error saving task:', error);
+      }
+    }
+
+    // Function to handle the export button click
+    function handleExportClick() {
+      //const filteredTasks = filterTasks();
+      exportFilteredTasksToExcel()
+      //exportTasksToExcel(filteredTasks);
+    }
+
+    // Function to handle the search button click
+    function handleSearchClick() {
+      const filteredTasks = filterTasks();
+      displayTasks(filteredTasks);
+    }
+
+    // Function to filter tasks based on the search input
+    function filterTasks() {
+      const searchValue = searchInput.value.toLowerCase();
+      const tasks = Array.from(taskList.children);
+
+      return tasks.filter(task => {
+        const taskId = task.querySelector('td:nth-child(1)').textContent.toLowerCase();
+        const client = task.querySelector('td:nth-child(2)').textContent.toLowerCase();
+        const startDate = task.querySelector('td:nth-child(3)').textContent.toLowerCase();
+        const endDate = task.querySelector('td:nth-child(4)').textContent.toLowerCase();
+        const status = task.querySelector('td:nth-child(5)').textContent.toLowerCase();
+        const description = task.querySelector('td:nth-child(6)').textContent.toLowerCase();
+        const source = task.querySelector('td:nth-child(7)').textContent.toLowerCase();
+
+        return (
+          taskId.includes(searchValue) ||
+          client.includes(searchValue) ||
+          startDate.includes(searchValue) ||
+          endDate.includes(searchValue) ||
+          status.includes(searchValue) ||
+          description.includes(searchValue) ||
+          source.includes(searchValue)
+        );
+      });
+    }
+
+    // Function to display the filtered tasks
+    // function displayTasks(tasks) {
+    //   taskList.innerHTML = '';
+
+    //   if (tasks.length === 0) {
+    //     const row = document.createElement('tr');
+    //     row.innerHTML = '<td colspan="8" class="py-2 px-4 border-b">No tasks found.</td>';
+    //     taskList.appendChild(row);
+    //   } else {
+    //     tasks.forEach(task => renderTask(task));
+    //   }
+    // }
+    // Function to display the filtered tasks
+function displayTasks(tasks) {
+  taskList.innerHTML = '';
+
+  if (tasks.length === 0) {
+    const row = document.createElement('tr');
+    row.innerHTML = '<td colspan="8" class="py-2 px-4 border-b">No tasks found.</td>';
+    taskList.appendChild(row);
+  } else {
+    tasks.forEach(task => {
+      const taskData = {
+        taskId: task.querySelector('td:nth-child(1)').textContent,
+        client: task.querySelector('td:nth-child(2)').textContent,
+        startDate: task.querySelector('td:nth-child(3)').textContent,
+        endDate: task.querySelector('td:nth-child(4)').textContent,
+        status: task.querySelector('td:nth-child(5)').textContent,
+        description: task.querySelector('td:nth-child(6)').textContent,
+        source: task.querySelector('td:nth-child(7)').textContent
+      };
+      renderTask(taskData);
+    });
+  }
+}
+
+
+    // Function to load and display the tasks
+    async function loadTasks() {
+      const tasks = await fetchTasks();
+      taskList.innerHTML = '';
+
+      if (tasks.length === 0) {
+        const row = document.createElement('tr');
+        row.innerHTML = '<td colspan="8" class="py-2 px-4 border-b">No tasks found.</td>';
+        taskList.appendChild(row);
+      } else {
+        tasks.forEach(task => renderTask(task));
+      }
+    }
+
+    // Event listener for the save task button
+    saveTaskBtn.addEventListener('click', saveTask);
+
+    // Event listener for the export button
+    exportBtn.addEventListener('click', handleExportClick);
+
+    // Event listener for the search button
+    searchBtn.addEventListener('click', handleSearchClick);
+
+    // Load and display the tasks on page load
+    loadTasks();
+  </script>
+</body>
+
+</html>
+
